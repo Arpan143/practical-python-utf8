@@ -154,3 +154,157 @@ str_str = unicode_string.encode('utf8')
 #### 6. 有错误, 不清楚的地方欢迎请指出, 谢谢:)
 
 [1]: http://www.python.org/dev/peps/pep-0263/ "PEP-0263"
+
+
+
+***English translation***
+
+#### 1. File encoding
+
+* What is the encoding of the file? ASCII (default) or other? You can use: set fileencoding to view under vim.
+Or use iconv: iconv -f utf8 filename If the output is normal, there is no error, no garbled characters, then the file should also be correctly saved in UTF-8 encoding.
+If you plan to use utf encoding, you can use: set fileencoding=utf8 to specify, vim will be responsible for completing the conversion work.
+
+* Regarding [PEP-0263] [1] The suggestion is to display the specified file encoding in the first two lines of the file in the following ways:
+
+    * `# coding=<encoding name>`
+    * `# -*- coding: <encoding name> -*-`
+    * `# vim: set fileencoding=<encoding name> :`
+    * The second type is relatively rare, the first type is more beautiful, and the 0th type is what I use :)
+
+* The role of file encoding
+
+    * Let people who read the code know how the file is encoded
+    * If there are explicit characters in the file (such as Chinese) that require special encoding processing, the editor can know how to process and save by specifying the encoding of the file.
+    * Explicitly specifically refers to:
+        * a = "I am Chinese"
+        * a = u"I am Chinese"
+* Example:
+
+
+```python
+File: 1-pyutf8.py
+
+#!/usr/bin/env python
+# encoding=utf-8
+import os
+import sys
+a = "I am Chinese"
+b = u"I am also Chinese"
+os.write(sys.stdin.fileno(), a)
+os.write(sys.stdin.fileno(), b)
+print a
+print b
+```
+
+* If # encoding=utf-8 is missing, the file will have an error during execution: `SyntaxError: Non-ASCII character'\xe6' in file 1-pyutf8.py on line 5, but no encoding declared; see http:/ /www.python.org/peps/pep-0263.html for details`
+
+* This is an error reported by the Python parser, and the reason for the error is that the Python parser did not find a suitable encoding method to parse the code. Note:
+  At this point, the encoded file has been correctly stored in UTF-8 format, but Python does not know it. So it needs to be specified explicitly.
+
+* In addition, regarding the use of print/os.write, print will perform some encoding conversions according to the terminal environment, which may "deceive" us. The result of os.write is more accurate and true.
+
+* trick: We can put the string in a collection type, such as list. Then use print to print the list, so that we can get the real data type.
+
+```python
+>>> a = "Chinese"
+>>> b = u"Chinese"
+>>> c = u"sunus"
+>>> print a, b, c
+Chinese Chinese sunus
+>>> print [a, b, c]
+['\xe4\xb8\xad\xe6\x96\x87', u'\u4e2d\u6587', u'sunus']
+```
+
+* The result of the second print can be known, a is str, b, and c are all unicode. But the first print will not display these information.
+
+* After confirming the file encoding, there is no problem, continue to analyze other errors.
+
+
+#### 2. unicode, str and UTF-8
+
+* In python2x, there are two different classes to represent strings, namely __unicode__ and __str__, and the corresponding Constructors are unicode(), str(), and they are all derived from the same base class __basestring__ Came out. By the way, the correct way to test an object is
+ʻIsinstance(value, basestring)`
+
+* Unicode is designed to handle multi-byte characters (such as Chinese). For ASCII characters, they are indistinguishable and compatible, but when there is Chinese, the problem arises.
+* UTF-8 is a specific implementation of unicode encoding.
+* We use __str__ as a readable string, unicode as an __abstract__ implementation of the string inside python and choose the correct storage method, print var,'xx', "xxx" then Are all str (u without a beginning)
+
+#### 3. encode and decode
+
+* __encode__: is to convert unicode to str encoding, and the encoding parameter is a specific implementation, such as UTF-8
+* __decode__: is to convert str into unicode encoding, and the encoding parameter is a specific implementation, such as UTF-8
+
+* Recommendations:
+    * For unicode, try to only make unicode objects exist in memory, __print output__, __network transmission__, __write file__, __before__ should be converted to str, and,
+    A unicode string containing non-ASCII characters is __cannot be written into the file__.
+    * Files resembling str strings or formed by external means (iconv, vim set fileencoding, etc) can themselves be read without barriers.
+    * Unicode string, only used as "intermediate state".
+
+        ```python
+        a = u'OnlyIn memory'
+        #if you want to see what's in a
+        #use:
+        ae = a.encode('utf8')
+        #do whatever you want with a, net transporat or write to file.
+        ```
+    * The encoding without encoding parameter, the default encoding used by the decode method is obtained by the system environment and is not recommended.
+
+#### 4. Examples:
+
+```python
+File: encode_or_decode_write.py
+
+#!/usr/bin/env python
+# encoding=utf-8
+
+import sys
+import os
+import traceback
+
+sstr1 = "Most Normal String\n"
+sstr2 = "I am str string\n"
+ustr1 = u"unicode string WITHOUT Chinese\n"
+ustr2 = u"I am a unicode string\n"
+
+def test(new_file_name, method, *args):
+    try:
+        with open(new_file_name,'w') as f:
+            for s in args:
+                so = s
+                s = getattr(s, method)('utf-8')
+                f.write(s)
+                print'write', so, [so], method,'succeed!'
+                print'%s to %s'% (str(so.__class__), str(so.__class__))
+    except:
+        traceback.print_exc()
+
+def main():
+    if sys.argv[1] =='encode':
+        test('str','encode', sstr1, sstr2)
+        test('uni','encode', ustr1, ustr2)
+    elif sys.argv[1] =='decode':
+        test('str','decode', sstr1, sstr2)
+        test('uni','decode', ustr1, ustr2)
+    else:
+        print'arg can only be decode or encode'
+
+main()
+```
+
+* Execute python encode_or_decode_write.py encode, sstr1, ustr1, ustr2 can successfully write the file, sstr2 fails.
+    * Use encode to unicode to make it a readable, writable, and transferable str. So ustr1 and ustr2 are successful.
+    * sstr1 succeeded because it did not contain non-ASCII characters. While sstr1 contained Chinese, it failed. __Do not use unicode for reading and writing__, __transfer__ and other operations
+
+* Execute python encode_or_decode_write.py decode, only sstr1 and ustr1 can be successfully written, because they have no non-ASCII characters.
+   * sstr2, decode, it becomes unicode. The process is successful, and the failure is because unicode __ is written to the file__
+   * ustr2, decode directly failed, the decode operation on unicode is inherently problematic!
+
+#### 5. Conclusion:
+* Keep unicode in memory
+* Read, write files, and use str for network transmission. That is
+str_str = unicode_string.encode('utf8')
+
+#### 6. There are errors, please point out any unclear points, thank you :)
+
+[1]: http://www.python.org/dev/peps/pep-0263/ "PEP-0263"
